@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 524" width="1520" height="1048" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#b5b8ad"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="760" height="524" fill="#ffffff"/>
+  <text x="24" y="30" font-size="15" font-weight="600" fill="#1a1a1a">O Run:ai agenda os pods de GPU e aplica a cota; o caminho da requisição não muda</text>
+
+  <g fill="none" stroke="#b5b8ad" stroke-width="1.25">
+    <path d="M224 108V132" marker-end="url(#arq-arrow)"/>
+    <path d="M224 188V212" marker-end="url(#arq-arrow)"/>
+    <path d="M224 268V292" marker-end="url(#arq-arrow)"/>
+    <path d="M118 364V388" marker-end="url(#arq-arrow)"/>
+    <path d="M330 364V388" marker-end="url(#arq-arrow)"/>
+    <path d="M628 260V276" marker-end="url(#arq-arrow)"/>
+    <path d="M536 336H424" marker-end="url(#arq-arrow)"/>
+  </g>
+
+  <g>
+    <rect x="24" y="52" width="400" height="56" rx="8" fill="none" stroke="#b5b8ad" stroke-width="1.25"/>
+    <text x="36" y="76" font-weight="600" fill="#1a1a1a">Aplicações br-*-prd e br-*-hml</text>
+    <text x="36" y="92" font-size="11.5" fill="#5c5c5c">Sem GPU; chamam os modelos com API key do MaaS</text>
+  </g>
+  <g>
+    <rect x="24" y="132" width="400" height="56" rx="8" fill="none" stroke="#b5b8ad" stroke-width="1.25"/>
+    <text x="36" y="156" font-weight="600" fill="#1a1a1a">Gateway do MaaS (Kuadrant)</text>
+    <text x="36" y="172" font-size="11.5" fill="#5c5c5c">Entra pelo F5 e por Route; API keys e limites de tokens</text>
+  </g>
+  <g>
+    <rect x="24" y="212" width="400" height="56" rx="8" fill="none" stroke="#b5b8ad" stroke-width="1.25"/>
+    <text x="36" y="236" font-weight="600" fill="#1a1a1a">llm-d: InferencePool + EPP</text>
+    <text x="36" y="252" font-size="11.5" fill="#5c5c5c">Roteia entre as réplicas de cada LLMInferenceService</text>
+  </g>
+  <g>
+    <rect x="24" y="292" width="400" height="72" rx="8" fill="none" stroke="#b5b8ad" stroke-width="1.25"/>
+    <text x="36" y="316" font-weight="600" fill="#1a1a1a">Pods de GPU nos namespaces de projeto</text>
+    <text x="36" y="332" font-size="11.5" fill="#5c5c5c">vLLM (Flash-Next, Qwen3.5, transcrição) e FindFace</text>
+    <text x="36" y="348" font-size="11.5" fill="#5c5c5c">nodeSelector e toleration explícitos no manifesto</text>
+  </g>
+  <g>
+    <rect x="24" y="388" width="188" height="88" rx="8" fill="none" stroke="#b5b8ad" stroke-width="1.25"/>
+    <text x="36" y="412" font-weight="600" fill="#1a1a1a">Node pool h200-nvl</text>
+    <text x="36" y="428" font-size="11.5" fill="#5c5c5c">Flash-Next TEP2: 2 GPUs</text>
+    <text x="36" y="444" font-size="11.5" fill="#5c5c5c">FindFace: 2 GPUs</text>
+  </g>
+  <g>
+    <rect x="236" y="388" width="188" height="88" rx="8" fill="none" stroke="#b5b8ad" stroke-width="1.25"/>
+    <text x="248" y="412" font-weight="600" fill="#1a1a1a">Node pool rtx4500-ada</text>
+    <text x="248" y="428" font-size="11.5" fill="#5c5c5c">RTX 1 e RTX 2, 20 GPUs</text>
+    <text x="248" y="444" font-size="11.5" fill="#5c5c5c">Qwen3.5 e transcrição</text>
+    <text x="248" y="460" font-size="11.5" fill="#5c5c5c">2 GPUs de reserva</text>
+  </g>
+
+  <g>
+    <rect x="520" y="132" width="216" height="264" rx="8" fill="#2c7be5" fill-opacity="0.12" stroke="#2c7be5" stroke-width="2"/>
+    <text x="532" y="154" font-weight="600" fill="#1a1a1a">NVIDIA Run:ai 3.0</text>
+  </g>
+  <g>
+    <rect x="536" y="172" width="184" height="88" rx="8" fill="none" stroke="#b5b8ad" stroke-width="1.25"/>
+    <text x="548" y="196" font-weight="600" fill="#1a1a1a">Control plane</text>
+    <text x="548" y="212" font-size="11.5" fill="#5c5c5c">namespace runai-backend</text>
+    <text x="548" y="228" font-size="11.5" fill="#5c5c5c">UI, API e CLI</text>
+    <text x="548" y="244" font-size="11.5" fill="#5c5c5c">Departamento e 4 projetos</text>
+  </g>
+  <g>
+    <rect x="536" y="276" width="184" height="104" rx="8" fill="none" stroke="#b5b8ad" stroke-width="1.25"/>
+    <text x="548" y="300" font-weight="600" fill="#1a1a1a">Cluster</text>
+    <text x="548" y="316" font-size="11.5" fill="#5c5c5c">namespace runai</text>
+    <text x="548" y="332" font-size="11.5" fill="#5c5c5c">runai-scheduler (KAI)</text>
+    <text x="548" y="348" font-size="11.5" fill="#5c5c5c">Webhook impõe o scheduler</text>
+    <text x="548" y="364" font-size="11.5" fill="#5c5c5c">Métricas: Thanos do OCP</text>
+  </g>
+
+  <text x="472" y="314" text-anchor="middle" font-size="11.5" fill="#5c5c5c">agenda e</text>
+  <text x="472" y="328" text-anchor="middle" font-size="11.5" fill="#5c5c5c">aplica cota</text>
+  <text x="24" y="500" font-size="11.5" fill="#5c5c5c">Os nós sem GPU ficam no node pool default; as aplicações br-* usam o scheduler padrão do OpenShift</text>
+</svg>

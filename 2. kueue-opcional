@@ -1,0 +1,210 @@
+# Kueue (opcional)
+
+Material de consulta. Descreve como usar o **Red Hat build of Kueue**, a opção nativa do OpenShift AI 3.5, para a cota de GPU dos mesmos workloads do [README.md](README.md). Ele **não faz parte** da arquitetura do README, que usa o NVIDIA Run:ai para esse papel. As duas opções **não convivem** no mesmo cluster. A comparação está em [Run:ai e o Red Hat build of Kueue](README.md#runai-e-o-red-hat-build-of-kueue).
+
+## O que foi validado
+
+| Item | Situação |
+| --- | --- |
+| Kueue gerenciando `LLMInferenceService` | **Validado** com RHOAI 3.5.2 + Kueue 1.5.0: os labels `kueue.x-k8s.io/*` do `LLMInferenceService` passam para o Deployment, o Kueue cria **um Workload por pod**, admite pela cota e o ResourceFlavor injeta `nodeSelector` e toleration |
+| EPP do llm-d | **Validado:** não usa GPU e não gera Workload |
+| Padrão "uma ClusterQueue → um namespace, cota exata, sem cohort" | **Validado** em 26/10/2026, com uma fila por ambiente × tipo de GPU (cada fila com um único namespace). Réplica acima da cota fica `SchedulingGated` |
+| Rolling update com a fila cheia | **Reproduzido:** o pod novo fica `SchedulingGated` enquanto o antigo segura a cota |
+| As 4 filas deste documento (`flashnext`, `findface`, `qwen35`, `transcricao`) | **Não testado** como conjunto |
+| FindFace (StatefulSet) e transcrição sob o Kueue | **Não testado** |
+
+## Desenho
+
+Uma ClusterQueue **por workload**, cada uma com um único ResourceFlavor, cota igual ao que o workload usa e sem cohort. É o equivalente do "um projeto Run:ai por workload" do README.
+
+| ClusterQueue | Namespace | ResourceFlavor | GPUs |
+| --- | --- | --- | --- |
+| `cq-flashnext` | `llm-flashnext` | `h200-nvl` | 2 |
+| `cq-findface` | `findface` | `h200-nvl` | 2 |
+| `cq-qwen35` | `llm-qwen35` | `rtx4500-ada` | 16 |
+| `cq-transcricao` | `ai-transcricao` | `rtx4500-ada` | 2 |
+| **Total** |  |  | **22 de 24** (2 RTX de reserva, sem fila) |
+
+Consequências do desenho:
+
+- **Sem preempção e sem `WorkloadPriorityClass`:** a prioridade do Kueue só vale dentro de uma mesma ClusterQueue, e cada fila tem um único workload.
+- **Um flavor por ClusterQueue:** se uma fila listar os dois flavors, o Kueue tenta na ordem e, com as RTX cheias, admitiria o Qwen3.5 numa H200.
+- **Sem shared cohorts:** cada fila é independente; não há empréstimo de cota.
+- **Tipo de GPU pelo ResourceFlavor:** ele injeta o `nodeSelector` (`nvidia.com/gpu.product`) e a toleration. Labels extras, como `ai.empresa/slot-extra=transcricao`, continuam no manifesto.
+
+## Passos
+
+Os passos de plataforma, MaaS e consumidores são os do README. Mudam a Etapa 5 (Kueue no lugar do Run:ai), a Etapa 7 (Kueue `Unmanaged`) e a Etapa 9 (filas no lugar dos projetos Run:ai).
+
+### 1. Instalar o Red Hat build of Kueue
+
+No web console, instale o operador **Red Hat build of Kueue** no namespace sugerido (`openshift-kueue-operator`). Depois crie o Kueue CR, com o nome `cluster`:
+
+```yaml
+apiVersion: kueue.openshift.io/v1
+kind: Kueue
+metadata:
+  name: cluster
+  namespace: openshift-kueue-operator
+spec:
+  managementState: Managed
+  config:
+    integrations:
+      frameworks:
+      - BatchJob
+      - Deployment      # LLMInferenceService e transcrição (validado)
+      - Pod
+      - StatefulSet     # FindFace (a validar)
+    preemption:
+      preemptionPolicy: Classical
+```
+
+```bash
+oc get kueues.kueue.openshift.io -A    # nome completo: depois do RHOAI, "kueue" resolve para o CRD do RHOAI
+oc get pods -n openshift-kueue-operator
+```
+
+### 2. OpenShift AI com Kueue `Unmanaged`
+
+No `DataScienceCluster` do README (Etapa 7.2), troque o componente:
+
+```yaml
+    kueue:
+      managementState: Unmanaged     # Red Hat build of Kueue; filas criadas à mão
+```
+
+E habilite o Kueue no dashboard:
+
+```bash
+oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications --type merge \
+  -p '{"spec":{"dashboardConfig":{"disableKueue":false}}}'
+```
+
+> O modo `Managed` (Kueue embutido) está depreciado e conflita com o Red Hat build of Kueue. No 3.5.2, a condição `KueueReady` aparece `True` sem `reason`; o que confirma o `Unmanaged` é não haver deployments do Kueue em `redhat-ods-applications`.
+
+### 3. Namespaces
+
+Os mesmos namespaces do README, com o label `kueue.openshift.io/managed=true`. Os taints dos nós de GPU também são os do README (Etapa 9.1).
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-flashnext
+  labels: { tipo: gpu-workload, kueue.openshift.io/managed: "true", inference-gateway-access: "true", maas-gateway-access: "true" }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-qwen35
+  labels: { tipo: gpu-workload, kueue.openshift.io/managed: "true", inference-gateway-access: "true", maas-gateway-access: "true" }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-transcricao
+  labels: { tipo: gpu-workload, kueue.openshift.io/managed: "true", inference-gateway-access: "true", maas-gateway-access: "true" }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: findface
+  labels: { tipo: gpu-workload, kueue.openshift.io/managed: "true" }
+```
+
+### 4. ResourceFlavors
+
+```yaml
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: h200-nvl
+spec:
+  nodeLabels:
+    nvidia.com/gpu.product: NVIDIA-H200-NVL
+  tolerations:
+  - { key: nvidia.com/gpu, operator: Equal, value: h200nvl, effect: NoSchedule }
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: rtx4500-ada
+spec:
+  nodeLabels:
+    nvidia.com/gpu.product: NVIDIA-RTX-4500-Ada-Generation
+  tolerations:
+  - { key: nvidia.com/gpu, operator: Equal, value: rtx4500ada, effect: NoSchedule }
+```
+
+### 5. ClusterQueues e LocalQueues
+
+Uma fila por workload. O exemplo mostra a do Qwen3.5; as outras três seguem o mesmo modelo, com o namespace, o flavor e as GPUs da tabela do [Desenho](#desenho). CPU e memória são exemplos: o Kueue só admite pods cujos recursos estejam cobertos pela fila, então ajuste ao que cada workload pede.
+
+```yaml
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: cq-qwen35
+spec:
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: llm-qwen35
+  resourceGroups:
+  - coveredResources: ["nvidia.com/gpu", "cpu", "memory"]
+    flavors:
+    - name: rtx4500-ada
+      resources:
+      - { name: nvidia.com/gpu, nominalQuota: 16 }
+      - { name: cpu,            nominalQuota: 128 }
+      - { name: memory,         nominalQuota: 512Gi }
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: { name: lq-qwen35, namespace: llm-qwen35 }
+spec: { clusterQueue: cq-qwen35 }
+```
+
+```bash
+oc get clusterqueues      # 4 filas, ACTIVE True
+oc get localqueues -A
+```
+
+> O `spec.clusterQueue` da LocalQueue é imutável: para trocar de fila, apague e recrie a LocalQueue.
+
+**`ResourceQuota` por namespace (opcional):** a mesma barreira do README, independente do Kueue. Com ela, uma réplica acima do teto é recusada já na criação.
+
+### 6. Hardware profiles
+
+Para deploy pelo dashboard: um perfil por projeto, com recursos **mínimo = padrão = máximo** e *Workload allocation strategy* = **Specify local queue**, apontando para a LocalQueue do projeto. Em namespaces gerenciados pelo Kueue, perfis do tipo *node selectors and tolerations* são bloqueados.
+
+### 7. Manifestos dos workloads
+
+No objeto de mais alto nível (`LLMInferenceService`, `Deployment` ou `StatefulSet`), o label da fila:
+
+```yaml
+metadata:
+  labels:
+    kueue.x-k8s.io/queue-name: lq-qwen35
+```
+
+Sem `schedulerName`, sem labels do Run:ai. O `nodeSelector` e a toleration do tipo de GPU podem ficar no manifesto (redundantes com o flavor) ou sair.
+
+### 8. Validação antes de seguir
+
+Com o primeiro `LLMInferenceService` no ar:
+
+```bash
+oc get workloads -n llm-qwen35                  # um Workload por pod: pod-<nome-do-pod>-*
+oc describe workload -n llm-qwen35 <nome>       # Admitted=True, flavor rtx4500-ada
+oc describe clusterqueue cq-qwen35              # uso de nvidia.com/gpu igual ao das réplicas no ar
+oc get pod -n llm-qwen35 <pod> -o yaml | grep -A3 -E 'nodeSelector|tolerations'   # injetados pelo flavor
+```
+
+- **Workload criado e admitido:** siga. Repita a verificação com o FindFace (StatefulSet) e a transcrição, que ainda não foram testados com o Kueue.
+- **Sem Workload** (os pods sobem sem passar pelo Kueue): ajuste os `frameworks` do Kueue CR e repita. Se não funcionar, aplique o plano B: `ResourceQuota`, taints e `nodeSelector`/tolerations no manifesto, sem agendador de GPU (o estado descrito no README, Parte 3, seção 4.5).
+
+## Operação
+
+- **Rolling update:** o Deployment gerado pelo `LLMInferenceService` sobe o pod novo antes de tirar o antigo, e o `LLMInferenceService` não deixa mudar a estratégia. Com a fila cheia, o pod novo fica `SchedulingGated`. Reduza uma réplica antes, como no README (Parte 3, seção 1).
+- **Mudar o número de GPUs por pod:** em janela de manutenção, `replicas: 0`, altere juntos o `--tensor-parallel-size` e o `nvidia.com/gpu` (`requests` e `limits`), aplique e volte as réplicas. Ajuste a `nominalQuota` da fila se o total mudar.
+- **Visibilidade:** `oc get workloads -A` e `oc describe clusterqueue <fila>`.
