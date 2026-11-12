@@ -65,5 +65,5 @@
   <text x="513" y="390" text-anchor="middle" font-size="11.5" fill="#534AB7">Flash-Next TEP2 no par NVLink · LLM menor e embeddings na de 71 GB</text>
 
   <text x="24" y="434" font-size="11.5" fill="#5c5c5c">Verde = VM Ubuntu (FindFace) · roxo = VM RHEL (LLMs). Exemplo com a GPU 0 fatiada: fatie a GPU que ficar fora</text>
-  <text x="24" y="452" font-size="11.5" fill="#5c5c5c">do par NVLink escolhido para o TEP2, conforme o nvidia-smi topo -m (Passo 1).</text>
+  <text x="24" y="452" font-size="11.5" fill="#5c5c5c">do par NVLink escolhido para o TEP2, conforme o nvidia-smi topo -m.</text>
 </svg>
