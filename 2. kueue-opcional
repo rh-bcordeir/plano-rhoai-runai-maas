@@ -1,6 +1,6 @@
 # Kueue (opcional)
 
-Material de consulta. Descreve como usar o **Red Hat build of Kueue**, a opção nativa do OpenShift AI 3.5, para a cota de GPU dos mesmos workloads do [README.md](README.md). Ele **não faz parte** da arquitetura do README, que usa o NVIDIA Run:ai para esse papel. As duas opções **não convivem** no mesmo cluster. A comparação está em [Run:ai e o Red Hat build of Kueue](README.md#runai-e-o-red-hat-build-of-kueue).
+Material de consulta. Descreve como usar o **Red Hat build of Kueue**, a opção nativa do OpenShift AI 3.5, para a cota de GPU dos workloads descritos no [documento da arquitetura anterior](5.%20arquitetura-anterior-h200-em-pods.md) (as "Etapas" citadas aqui são as dele). Ele **não faz parte** da arquitetura, que usa o NVIDIA Run:ai para esse papel. Na arquitetura atual ([README](README.md)), o nó H200 virou VMs e só o Qwen3.5 fica nas RTX: sobra apenas a fila `cq-qwen35` (16 RTX). As duas opções **não convivem** no mesmo cluster. A comparação está em [Run:ai e o Red Hat build of Kueue](5.%20arquitetura-anterior-h200-em-pods.md#runai-e-o-red-hat-build-of-kueue).
 
 ## O que foi validado
 
@@ -15,7 +15,7 @@ Material de consulta. Descreve como usar o **Red Hat build of Kueue**, a opção
 
 ## Desenho
 
-Uma ClusterQueue **por workload**, cada uma com um único ResourceFlavor, cota igual ao que o workload usa e sem cohort. É o equivalente do "um projeto Run:ai por workload" do README.
+Uma ClusterQueue **por workload**, cada uma com um único ResourceFlavor, cota igual ao que o workload usa e sem cohort. É o equivalente do "um projeto Run:ai por workload" do documento base.
 
 | ClusterQueue | Namespace | ResourceFlavor | GPUs |
 | --- | --- | --- | --- |
@@ -34,7 +34,7 @@ Consequências do desenho:
 
 ## Passos
 
-Os passos de plataforma, MaaS e consumidores são os do README. Mudam a Etapa 5 (Kueue no lugar do Run:ai), a Etapa 7 (Kueue `Unmanaged`) e a Etapa 9 (filas no lugar dos projetos Run:ai).
+Os passos de plataforma, MaaS e consumidores são os do documento base. Mudam a Etapa 5 (Kueue no lugar do Run:ai), a Etapa 7 (Kueue `Unmanaged`) e a Etapa 9 (filas no lugar dos projetos Run:ai).
 
 ### 1. Instalar o Red Hat build of Kueue
 
@@ -66,7 +66,7 @@ oc get pods -n openshift-kueue-operator
 
 ### 2. OpenShift AI com Kueue `Unmanaged`
 
-No `DataScienceCluster` do README (Etapa 7.2), troque o componente:
+No `DataScienceCluster` do documento base (Etapa 7.2), troque o componente:
 
 ```yaml
     kueue:
@@ -84,7 +84,7 @@ oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications --ty
 
 ### 3. Namespaces
 
-Os mesmos namespaces do README, com o label `kueue.openshift.io/managed=true`. Os taints dos nós de GPU também são os do README (Etapa 9.1).
+Os mesmos namespaces do documento base, com o label `kueue.openshift.io/managed=true`. Os taints dos nós de GPU também são os do documento base (Etapa 9.1).
 
 ```yaml
 apiVersion: v1
@@ -171,7 +171,7 @@ oc get localqueues -A
 
 > O `spec.clusterQueue` da LocalQueue é imutável: para trocar de fila, apague e recrie a LocalQueue.
 
-**`ResourceQuota` por namespace (opcional):** a mesma barreira do README, independente do Kueue. Com ela, uma réplica acima do teto é recusada já na criação.
+**`ResourceQuota` por namespace (opcional):** a mesma barreira do documento base, independente do Kueue. Com ela, uma réplica acima do teto é recusada já na criação.
 
 ### 6. Hardware profiles
 
@@ -201,10 +201,10 @@ oc get pod -n llm-qwen35 <pod> -o yaml | grep -A3 -E 'nodeSelector|tolerations' 
 ```
 
 - **Workload criado e admitido:** siga. Repita a verificação com o FindFace (StatefulSet) e a transcrição, que ainda não foram testados com o Kueue.
-- **Sem Workload** (os pods sobem sem passar pelo Kueue): ajuste os `frameworks` do Kueue CR e repita. Se não funcionar, aplique o plano B: `ResourceQuota`, taints e `nodeSelector`/tolerations no manifesto, sem agendador de GPU (o estado descrito no README, Parte 3, seção 4.5).
+- **Sem Workload** (os pods sobem sem passar pelo Kueue): ajuste os `frameworks` do Kueue CR e repita. Se não funcionar, aplique o plano B: `ResourceQuota`, taints e `nodeSelector`/tolerations no manifesto, sem agendador de GPU (o estado descrito no documento base, Parte 3, seção 4.5).
 
 ## Operação
 
-- **Rolling update:** o Deployment gerado pelo `LLMInferenceService` sobe o pod novo antes de tirar o antigo, e o `LLMInferenceService` não deixa mudar a estratégia. Com a fila cheia, o pod novo fica `SchedulingGated`. Reduza uma réplica antes, como no README (Parte 3, seção 1).
+- **Rolling update:** o Deployment gerado pelo `LLMInferenceService` sobe o pod novo antes de tirar o antigo, e o `LLMInferenceService` não deixa mudar a estratégia. Com a fila cheia, o pod novo fica `SchedulingGated`. Reduza uma réplica antes, como no documento base (Parte 3, seção 1).
 - **Mudar o número de GPUs por pod:** em janela de manutenção, `replicas: 0`, altere juntos o `--tensor-parallel-size` e o `nvidia.com/gpu` (`requests` e `limits`), aplique e volte as réplicas. Ajuste a `nominalQuota` da fila se o total mudar.
 - **Visibilidade:** `oc get workloads -A` e `oc describe clusterqueue <fila>`.
